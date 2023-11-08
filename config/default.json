@@ -1,0 +1,7 @@
+{
+    "openprojectUrl": "http://localhost:8080",
+    "apiKey": "",
+    "connectionUri": "bolt://localhost:7687",
+    "username": "",
+    "password": ""
+}
