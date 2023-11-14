@@ -1,49 +1,84 @@
-import express, { Request, Response } from 'express';
-import bodyParser from 'body-parser';
-import OpenProject from './modules/openproject';
-import config from 'config'
 import { exportProject } from './modules/openproject-neo-util';
-import { closeConnection } from './modules/neo';
-import { identifyCommonEntities } from './modules/merge';
+import commandLineArgs from 'command-line-args'
+import commandLineUsage from 'command-line-usage'
+import config from 'config';
 
-const app = express();
-app.use(bodyParser.json());
-
-app.all('/webhook', (req: Request, res: Response) => {
-  const payload = req.body;
-  let workPackage = {
-    action: payload.action,
-    name: payload.work_package.subject,
-    type: payload.work_package._embedded.type.name,
-    status: {
-      id: payload.work_package._embedded.status.id,
-      name: payload.work_package._embedded.status.name,
-      isClosed: payload.work_package._embedded.status.isClosed
+const optionDefinitions = [
+    {
+        name: 'help',
+        alias: 'h',
+        type: Boolean,
+        description: 'Display this usage guide.'
+    },
+    {
+        name: 'apiToken',
+        alias: 'a',
+        type: String,
+        description: 'Token to access the OpenProject API',
+        typeLabel: '<apiToken>'
+    },
+    {
+        name: 'openProjectUrl',
+        alias: 'o',
+        type: String,
+        description: 'URL of your OpenProject Installation',
+        typeLabel: '<openProjectUri>'
+    },
+    {
+        name: 'username',
+        alias: 'u',
+        type: String,
+        description: 'Name of Neo4j User',
+        typeLabel: '<username>'
+    },
+    {
+        name: 'password',
+        alias: 'p',
+        type: String,
+        description: 'Password of Neo4j User',
+        typeLabel: '<password>'
+    },
+    {
+        name: 'connectionUri',
+        alias: 'c',
+        type: String,
+        description: 'Connection URI',
+        typeLabel: '<connectionUri>'
+    },
+    {
+        name: 'model',
+        alias: 'm',
+        type: String,
+        description: 'Name of the model to which the data shall be extracted.',
+    },
+    {
+        name: 'id',
+        type: Number,
+        description: 'ID of the project to export',
     }
-  }
-  // Process the webhook payload here
-  console.log(workPackage);
-  //console.log(JSON.stringify(payload));
-  res.sendStatus(200);
-});
+]
 
-identifyCommonEntities('PEPMLTemp', 'PEPMLDep').then(() => closeConnection());
+const options = commandLineArgs(optionDefinitions)
 
-// const port = 4000;
-// app.listen(port, () => {
-//   console.log(`Server is running on http://localhost:${port}`);
-// });
+if (options.help) {
+    const usage = commandLineUsage([
+        {
+            header: 'Example Usage',
+            content: 'node lib/index.js -m OpenProjectModel --id 3'
+        },
+        {
+            header: 'Options',
+            optionList: optionDefinitions
+        }
+    ])
+    console.log(usage)
+} else {
+    console.log(options)
+    let connectionUri = options.connectionUri || config.get("connectionUri");
+    let username = options.username || config.get("username");
+    let password = options.password || config.get("password");
+    let model = options.model || config.get("model");
+    let id = options.id || config.get("id");
 
-//exportProject(3, 'OpenProjectModel').then(() => closeConnection());
-
-//orm.getStatuses().then(statuses => console.log(statuses));
-// console.log('start')
-// orm.getTasks(3).then((tasks) => {
-//   tasks.forEach(task => {
-//     let workPackage = {
-//       name: task.subject,
-//       //type: payload.work_package._embedded.type.name,
-//     }
-//     console.log(workPackage);
-//   })
-// })
+    exportProject(id, model, connectionUri, username, password);
+}

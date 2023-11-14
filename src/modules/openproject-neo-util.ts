@@ -1,12 +1,18 @@
 import OpenProject, { WorkPackageStatus, WorkPackageType } from "./openproject";
-import { getSession, closeSession } from "./neo";
-import { Session } from "neo4j-driver";
 import { addModel, deleteModel } from "./neocore-utils";
+import neo4j, { Session } from 'neo4j-driver';
 
-export async function exportProject(projectId: number, modelName: string) {
-    await deleteModel(modelName);
-    await addModel(modelName, 'OpenProject');
-    const session = getSession('export project');
+export async function exportProject(projectId: number, modelName: string, connectionUri: string, username: string, password: string) {
+    const driver = neo4j.driver(
+        connectionUri,
+        neo4j.auth.basic(username, password),
+        { disableLosslessIntegers: true }
+    );
+
+    const session = driver.session();
+
+    await deleteModel(modelName, session);
+    await addModel(modelName, 'OpenProject', session);
     try {
         await addProject(projectId, modelName, session);
         await addStatuses(modelName, session);
@@ -14,8 +20,9 @@ export async function exportProject(projectId: number, modelName: string) {
         await addWorkPackages(3, modelName, session);
         console.log("exported");
     } finally {
-        console.log("should close");
-        await closeSession();
+        console.log("closing");
+        await session.close();
+        await driver.close();
     }
 }
 
@@ -38,7 +45,7 @@ async function addWorkPackages(projectId: number, modelName: string, session: Se
     let wps = await OpenProject.getWorkPackages(projectId);
     let types = await OpenProject.getWorkPackageTypes()
     wps.forEach(wp => wp.type = types.find(t => t.id == OpenProject.hrefToId(wp._links.type?.href)).name);
-    await addObjects(wps, ['id', 'subject','type'], 'OpenProject__WorkPackage', modelName, session);
+    await addObjects(wps, ['id', 'subject', 'type'], 'OpenProject__WorkPackage', modelName, session);
     let relationships = [];
     wps.filter(wp => wp._links?.parent?.href).forEach(wp => relationships.push({ name: 'parent', sourceId: wp.id, sourceLabel: 'OpenProject__WorkPackage', targetId: OpenProject.hrefToId(wp._links.parent?.href), targetLabel: 'OpenProject__WorkPackage' }));
     wps.filter(wp => wp._links?.status?.href).forEach(wp => relationships.push({ name: 'status', sourceId: wp.id, sourceLabel: 'OpenProject__WorkPackage', targetId: OpenProject.hrefToId(wp._links.status?.href), targetLabel: 'OpenProject__Status' }));
@@ -53,9 +60,9 @@ async function addWorkPackages(projectId: number, modelName: string, session: Se
             RETURN rel
         `, { modelName, relationships })
     let generalRelationships = [
-        {name: "statuses", label: "OpenProject__Status"},
-        {name: "types", label: "OpenProject__Type"},
-        {name: "workPackages", label: "OpenProject__WorkPackage"}
+        { name: "statuses", label: "OpenProject__Status" },
+        { name: "types", label: "OpenProject__Type" },
+        { name: "workPackages", label: "OpenProject__WorkPackage" }
     ];
     await session.run(`
             UNWIND $generalRelationships AS r
